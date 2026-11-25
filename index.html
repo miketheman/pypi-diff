@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PyPI Package Diff</title>
+<meta name="description" content="Compare two PyPI packages or versions in the browser: which files differ, and how.">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-03Xgjy7trDhTlf5XSRlwe1xNUaLByqoy5EpUp830kU4='; worker-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://pypi.org https://files.pythonhosted.org; img-src 'self' data:; base-uri 'none'; form-action 'none'">
+<meta name="color-scheme" content="light dark">
+<!-- Applies the stored theme before first paint. Its hash is in the CSP above: change one, change both. -->
+<script>try{document.querySelector('meta[name="color-scheme"]').content=localStorage.getItem('pypi-diff-theme')??'light dark'}catch{}</script>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="css/style.css">
+<script type="module" src="js/main.js"></script>
+</head>
+<body>
+
+<div class="header">
+  <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+    <title>pypi-diff logo</title>
+    <rect x="2" y="6" width="11" height="11" rx="2" fill="#ffd343" opacity="0.9"/>
+    <rect x="15" y="6" width="11" height="11" rx="2" fill="rgba(255,255,255,0.3)"/>
+    <rect x="8" y="14" width="11" height="11" rx="2" fill="rgba(255,255,255,0.5)"/>
+  </svg>
+  <h1>pypi-diff</h1>
+  <button class="theme-toggle" type="button" id="themeToggle">
+    <svg class="icon-system" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
+    <svg class="icon-light" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+    <svg class="icon-dark" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  </button>
+</div>
+
+<div class="main">
+  <div class="selectors">
+    <!-- Left package -->
+    <div class="pkg-panel left" id="panelA">
+      <div class="field-row">
+        <label for="pkgA">Package A <a class="pkg-link" id="pkgLinkA" href="#" target="_blank" rel="noopener" aria-label="View on PyPI"></a></label>
+        <input type="text" id="pkgA" placeholder="e.g. urllib3, or a files.pythonhosted.org URL" spellcheck="false">
+      </div>
+      <div class="field-row">
+        <label for="verA">Version</label>
+        <select id="verA" disabled><option>—</option></select>
+      </div>
+      <div class="field-row">
+        <label for="fileA">File</label>
+        <select id="fileA" disabled><option>—</option></select>
+        <div class="size-note" id="sizeA"></div>
+      </div>
+    </div>
+
+    <div class="vs-col"><div class="vs-badge">vs</div></div>
+
+    <!-- Right package -->
+    <div class="pkg-panel right" id="panelB">
+      <div class="field-row">
+        <label for="pkgB">Package B <a class="pkg-link" id="pkgLinkB" href="#" target="_blank" rel="noopener" aria-label="View on PyPI"></a></label>
+        <input type="text" id="pkgB" placeholder="e.g. urllib3, or a files.pythonhosted.org URL" spellcheck="false">
+      </div>
+      <div class="field-row">
+        <label for="verB">Version</label>
+        <select id="verB" disabled><option>—</option></select>
+      </div>
+      <div class="field-row">
+        <label for="fileB">File</label>
+        <select id="fileB" disabled><option>—</option></select>
+        <div class="size-note" id="sizeB"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="compare-row">
+    <button type="button" class="btn btn-primary" id="compareBtn" disabled>Compare Files</button>
+  </div>
+
+  <div class="error-box" id="errorBox"></div>
+
+  <div class="progress-area" id="progressArea">
+    <div class="progress-bar-outer"><div class="progress-bar-inner" id="progressBar"></div></div>
+    <div class="progress-label" id="progressLabel">Preparing...</div>
+  </div>
+
+  <div class="results" id="results">
+    <div class="summary-bar" id="summaryBar">
+      <div class="summary-stat modified"><div class="num" id="count-modified">0</div><div class="lbl">Modified</div></div>
+      <div class="summary-stat added"><div class="num" id="count-added">0</div><div class="lbl">Added</div></div>
+      <div class="summary-stat removed"><div class="num" id="count-removed">0</div><div class="lbl">Removed</div></div>
+      <div class="summary-stat moved"><div class="num" id="count-moved">0</div><div class="lbl">Moved</div></div>
+      <div class="summary-stat equivalent"><div class="num" id="count-equivalent">0</div><div class="lbl">Equivalent</div></div>
+      <div class="summary-stat identical"><div class="num" id="count-identical">0</div><div class="lbl">Identical</div></div>
+      <div class="similarity-ring" id="similarityRing">
+        <svg width="60" height="60" viewBox="0 0 60 60" aria-hidden="true">
+          <circle class="track" cx="30" cy="30" r="24" fill="none" stroke-width="4"/>
+          <circle class="arc" id="similarityArc" cx="30" cy="30" r="24" fill="none" stroke-width="4" stroke-linecap="round"/>
+        </svg>
+        <div class="pct" id="similarityPct"></div>
+      </div>
+      <button class="help-btn" type="button" popovertarget="helpPopover" aria-label="Comparison legend" title="Comparison legend">?</button>
+    </div>
+    <div class="help-popover" id="helpPopover" popover>
+      <h2>Comparison Logic</h2>
+      <dl>
+        <dt><span class="status-badge modified">modified</span></dt>
+        <dd>Files exist on both sides but have meaningful content differences beyond name/version/whitespace.</dd>
+        <dt><span class="status-badge added">added</span></dt>
+        <dd>File exists only in package B.</dd>
+        <dt><span class="status-badge removed">removed</span></dt>
+        <dd>File exists only in package A.</dd>
+        <dt><span class="status-badge moved">moved</span></dt>
+        <dd>File exists on both sides at different paths with the same filename and identical content.
+            Detected by matching basenames between added and removed files. Empty files are never matched.</dd>
+        <dt><span class="status-badge equivalent">equivalent</span></dt>
+        <dd>Files differ only in ways explained by the package name, version, or whitespace.
+            Detected by replacing all occurrences of each package name (including hyphen/underscore variants)
+            and version with placeholders, then comparing. Names inside URLs are not replaced. RECORD files are compared by normalized
+            file path list only, ignoring hashes and sizes (which change with name length).</dd>
+        <dt><span class="status-badge identical">identical</span></dt>
+        <dd>For sdists, the content is byte-for-byte the same. For wheels, the size and CRC-32 recorded in the
+            archive match; the content is not downloaded, and a CRC-32 can be forged. Open the file to diff the real content.</dd>
+      </dl>
+      <h2>Similarity %</h2>
+      <p>Overall ring counts identical + equivalent + moved files. Per-file % is a size ratio approximation for modified files.</p>
+    </div>
+    <div class="size-note" id="refineNote"></div>
+    <div class="file-list-section">
+      <div class="file-list-header">
+        <h2>Files</h2>
+        <div class="filter-tabs" id="filterTabs">
+          <button type="button" class="filter-tab active" data-filter="all">All</button>
+          <button type="button" class="filter-tab" data-filter="modified">Modified</button>
+          <button type="button" class="filter-tab" data-filter="added">Added</button>
+          <button type="button" class="filter-tab" data-filter="removed">Removed</button>
+          <button type="button" class="filter-tab" data-filter="moved">Moved</button>
+          <button type="button" class="filter-tab" data-filter="equivalent">Equivalent</button>
+          <button type="button" class="filter-tab" data-filter="identical">Identical</button>
+        </div>
+      </div>
+      <table class="file-table">
+        <thead>
+          <tr>
+            <th>Path</th>
+            <th>Size A</th>
+            <th>Size B</th>
+            <th>Status</th>
+            <th>Similarity</th>
+          </tr>
+        </thead>
+        <tbody id="fileTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<dialog class="diff-modal" id="diffDialog" closedby="any" aria-labelledby="diffFilepath">
+  <div class="diff-modal-header">
+    <h1 class="filepath" id="diffFilepath"></h1>
+    <button type="button" class="diff-modal-close" id="diffClose" aria-label="Close" autofocus>&times;</button>
+  </div>
+  <div class="diff-modal-body">
+    <div class="diff-scroll" id="diffScroll">
+      <div class="diff-content" id="diffContent"></div>
+    </div>
+    <div class="diff-minimap" id="diffMinimap"></div>
+  </div>
+</dialog>
+
+<footer class="footer">
+  <p>A project by <a href="https://miketheman.dev" rel="noopener">Mike Fiedler</a>.</p>
+  <p>"PyPI", "Python Package Index", and the blocks logos are registered trademarks of the <a href="https://www.python.org/psf-landing/" rel="noopener">Python Software Foundation</a>.</p>
+</footer>
+
+<template id="fileRowTemplate">
+  <tr tabindex="0">
+    <td class="path"></td>
+    <td class="size"></td>
+    <td class="size"></td>
+    <td><span class="status-badge"></span></td>
+    <td class="size"></td>
+  </tr>
+</template>
+
+<template id="diffLoadingTemplate">
+  <div class="diff-loading"><div class="spinner"></div><br>Loading file contents...</div>
+</template>
+
+</body>
+</html>
